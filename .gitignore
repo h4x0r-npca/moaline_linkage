@@ -24,6 +24,9 @@ env/
 *.swp
 *.tmp
 
+# Internal study notes
+PROGRAM_STUDY_GUIDE.md
+
 # OS files
 Thumbs.db
 desktop.ini
