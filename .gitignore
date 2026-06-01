@@ -1,0 +1,30 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build/
+dist/
+*.log
+
+# PyInstaller temporary artifacts
+*.manifest
+*.toc
+*.pyz
+*.pkg
+
+# Local/editor files
+.venv/
+venv/
+env/
+.env
+.idea/
+.vscode/
+*.swp
+*.tmp
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
