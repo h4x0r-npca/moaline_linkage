@@ -29,6 +29,7 @@ PyInstaller.__main__.run([
     "--clean",
     "--onefile",
     "--noconsole",
+    "--noupx",
     "--uac-admin",
     "--icon", "moaline.ico",
     "--version-file", "version_info.txt",

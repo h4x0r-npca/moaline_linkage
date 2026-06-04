@@ -2,9 +2,50 @@ import os
 import sys
 import threading
 import tkinter as tk
+import ctypes
+import time
 import webbrowser
 from tkinter import scrolledtext
 from typing import List, Tuple
+
+import startup_logger
+
+startup_logger.log_startup_event("python_start")
+startup_logger.log_runtime_context()
+
+
+ERROR_ALREADY_EXISTS = 183
+ERROR_ACCESS_DENIED = 5
+_INSTANCE_MUTEX_HANDLE = None
+
+
+def acquire_single_instance() -> bool:
+    global _INSTANCE_MUTEX_HANDLE
+    mutex_name = "Local\\MoalineLinkageAutomation"
+    ctypes.windll.kernel32.SetLastError(0)
+    handle = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
+    last_error = ctypes.windll.kernel32.GetLastError()
+    if not handle and last_error != ERROR_ACCESS_DENIED:
+        startup_logger.log_startup_event(
+            "single_instance_unavailable",
+            "last_error={}".format(last_error),
+        )
+        return True
+    if not handle and last_error == ERROR_ACCESS_DENIED:
+        startup_logger.log_startup_event("duplicate_instance", "mutex access denied")
+        return False
+    if last_error == ERROR_ALREADY_EXISTS:
+        startup_logger.log_startup_event("duplicate_instance", "mutex already exists")
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+        return False
+    _INSTANCE_MUTEX_HANDLE = handle
+    startup_logger.log_startup_event("single_instance_acquired")
+    return True
+
+
+if not acquire_single_instance():
+    sys.exit(0)
 
 import customtkinter as ctk
 from PIL import Image, ImageTk
@@ -201,6 +242,7 @@ def show_error_and_exit(parent: tk.Tk) -> None:
 # ──────────────────────────────────────────────
 class App:
     def __init__(self, root: tk.Tk) -> None:
+        startup_logger.log_startup_event("app_init_start")
         self.root = root
         root.title(
             "모아라인 연동 자동화 Ver {} (Release : {})".format(
@@ -224,6 +266,7 @@ class App:
         self._logo_image = self._load_logo("로고한글.webp", (220, 84))
         self._set_window_icon()
         self._build_ui()
+        startup_logger.log_startup_event("app_ui_ready")
         self.root.after(300, self._refresh_status)
 
     def _load_logo(self, filename: str, size: Tuple[int, int]) -> ctk.CTkImage:
@@ -463,6 +506,10 @@ class App:
     def _refresh_status(self) -> None:
         self._status_refresh_id += 1
         refresh_id = self._status_refresh_id
+        startup_logger.log_startup_event(
+            "status_check_scheduled",
+            "refresh_id={}".format(refresh_id),
+        )
         self._set_status("checking", "STATUS : 연동 확인 중")
         threading.Thread(
             target=self._refresh_status_worker,
@@ -471,7 +518,22 @@ class App:
         ).start()
 
     def _refresh_status_worker(self, refresh_id: int) -> None:
+        started_at = time.perf_counter()
+        startup_logger.log_startup_event(
+            "status_check_start",
+            "refresh_id={}".format(refresh_id),
+        )
         is_linked, status_text = self._check_linkage_status()
+        elapsed = time.perf_counter() - started_at
+        startup_logger.log_startup_event(
+            "status_check_finish",
+            "refresh_id={} | linked={} | elapsed={:0.3f}s | text={}".format(
+                refresh_id,
+                is_linked,
+                elapsed,
+                status_text,
+            ),
+        )
         state = "linked" if is_linked else "missing"
         self.root.after(
             0,
@@ -700,10 +762,14 @@ class App:
 # 진입점
 # ──────────────────────────────────────────────
 def main() -> None:
+    startup_logger.log_startup_event("admin_check_start")
     admin.ensure_admin()
+    startup_logger.log_startup_event("admin_check_finish")
     root = ctk.CTk()
     App(root)
+    startup_logger.log_startup_event("mainloop_start")
     root.mainloop()
+    startup_logger.log_startup_event("mainloop_finish")
 
 
 if __name__ == "__main__":
