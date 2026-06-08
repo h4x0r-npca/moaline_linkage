@@ -40,6 +40,7 @@ class MonitorConfig:
     selected_ports: List[str]
     port_settings: Dict[str, PortSettings]
     driver_backend_enabled: bool = False
+    direct_monitor_enabled: bool = False
 
 
 def ensure_com_dirs() -> None:
@@ -48,10 +49,11 @@ def ensure_com_dirs() -> None:
 
 
 def default_config(ports: Optional[List[str]] = None) -> MonitorConfig:
-    selected = [p.upper() for p in ports] if ports else []
+    selected = []
+    settings_ports = [p.upper() for p in ports] if ports else []
     return MonitorConfig(
         selected_ports=selected,
-        port_settings={p: PortSettings() for p in selected},
+        port_settings={p: PortSettings() for p in settings_ports},
     )
 
 
@@ -77,8 +79,6 @@ def load_config(available_ports: Optional[List[str]] = None) -> MonitorConfig:
         return cfg
 
     selected = [str(p).upper() for p in data.get("selected_ports", [])]
-    if not selected and available_ports:
-        selected = [p.upper() for p in available_ports]
 
     settings = {}
     raw_settings = data.get("port_settings", {})
@@ -92,6 +92,7 @@ def load_config(available_ports: Optional[List[str]] = None) -> MonitorConfig:
         selected_ports=selected,
         port_settings=settings,
         driver_backend_enabled=bool(data.get("driver_backend_enabled", False)),
+        direct_monitor_enabled=bool(data.get("direct_monitor_enabled", False)),
     )
 
 
@@ -104,6 +105,7 @@ def save_config(config: MonitorConfig) -> None:
             for p, settings in config.port_settings.items()
         },
         "driver_backend_enabled": bool(config.driver_backend_enabled),
+        "direct_monitor_enabled": bool(config.direct_monitor_enabled),
     }
     with open(CONFIG_PATH, "w", encoding="utf-8") as fp:
         json.dump(data, fp, ensure_ascii=False, indent=2)

@@ -6,6 +6,7 @@ from datetime import datetime
 from serial_monitor_core import (
     ReceiptLogWriter,
     ReceiptSplitter,
+    default_config,
     parse_hex_patterns,
     preview_text,
 )
@@ -71,6 +72,16 @@ class ReceiptLogWriterTests(unittest.TestCase):
 
         self.assertIn("전북남원", text)
         self.assertNotIn("\x1b", text)
+
+
+class MonitorConfigTests(unittest.TestCase):
+    def test_default_config_does_not_select_ports(self):
+        config = default_config(["COM1", "COM2"])
+
+        self.assertEqual(config.selected_ports, [])
+        self.assertFalse(config.direct_monitor_enabled)
+        self.assertIn("COM1", config.port_settings)
+        self.assertIn("COM2", config.port_settings)
 
 
 if __name__ == "__main__":

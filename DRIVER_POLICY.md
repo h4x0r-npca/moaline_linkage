@@ -9,6 +9,13 @@
 - Microsoft WDK 샘플: 무료 기술 참고 및 PoC 검토
 - pyserial, pystray 등 무료 Python 라이브러리
 
+## 안전 원칙
+
+- `pyserial` 직접 감시는 COM 포트를 독점 점유할 수 있으므로 운영 매장에서 기본 실행하지 않습니다.
+- `moa_linkageSM.exe`는 실행만으로 COM 포트를 열지 않아야 합니다.
+- 포트 선택, 설정 저장, 자동실행 등록은 포트 점유를 발생시키면 안 됩니다.
+- 직접 감시는 POS/프린터가 해당 포트를 사용하지 않는 테스트 환경에서만 수동으로 실행합니다.
+
 ## 제외
 
 - HHD Software 등 유료 Serial Port Monitoring Control

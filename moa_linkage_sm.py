@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import tkinter as tk
+from tkinter import messagebox
 from tkinter import scrolledtext
 from typing import Dict, List
 
@@ -109,6 +110,7 @@ class SerialMonitorApp:
         ensure_com_dirs()
         self.available_ports = list_physical_ports()
         self.config = load_config(self.available_ports)
+        self.config.direct_monitor_enabled = False
         self._ensure_config_ports()
 
         self.port_vars: Dict[str, ctk.BooleanVar] = {}
@@ -126,12 +128,10 @@ class SerialMonitorApp:
         self._build_ui()
         self._load_settings_form()
         self._start_tray()
-        self.restart_monitoring()
+        self._set_idle_status()
         self.root.after(700, self._startup_notice)
 
     def _ensure_config_ports(self) -> None:
-        if not self.config.selected_ports and self.available_ports:
-            self.config.selected_ports = list(self.available_ports)
         for port in self.available_ports:
             self.config.port_settings.setdefault(port, PortSettings())
         save_config(self.config)
@@ -162,7 +162,7 @@ class SerialMonitorApp:
         ).pack(anchor="w")
         ctk.CTkLabel(
             title_box,
-            text="물리 COM 포트의 영수증 출력 데이터를 감시하고 C:\\COM 로그 폴더에 저장합니다.",
+            text="드라이버 후킹 전까지 직접 감시는 테스트용입니다. 실행만으로 COM 포트를 열지 않습니다.",
             font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             text_color="#EEE4FF",
         ).pack(anchor="w", pady=(4, 0))
@@ -194,7 +194,7 @@ class SerialMonitorApp:
 
         ctk.CTkLabel(
             settings_panel,
-            text="감시 포트 선택",
+            text="테스트 포트 선택",
             font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             text_color=COLOR_TEXT,
         ).pack(anchor="w", padx=16, pady=(16, 8))
@@ -286,17 +286,18 @@ class SerialMonitorApp:
             border_color=COLOR_PRIMARY_LINE,
             width=104,
         ).pack(side="left", padx=6)
-        ctk.CTkButton(
+        self.monitor_toggle_btn = ctk.CTkButton(
             actions,
-            text="감시 재시작",
-            command=self.restart_monitoring,
+            text="테스트 감시 시작",
+            command=self.toggle_test_monitoring,
             fg_color="#FFFFFF",
-            hover_color="#EEF8F2",
-            text_color=COLOR_OK,
+            hover_color="#FFF4E5",
+            text_color=COLOR_WARN,
             border_width=1,
-            border_color="#B6E2CC",
+            border_color="#F3C77F",
             width=104,
-        ).pack(side="left")
+        )
+        self.monitor_toggle_btn.pack(side="left")
 
         log_panel = ctk.CTkFrame(
             content,
@@ -371,7 +372,7 @@ class SerialMonitorApp:
             self.config.port_settings.setdefault(port, PortSettings())
         save_config(self.config)
         self._sync_tabs()
-        self.restart_monitoring()
+        self._set_idle_status()
 
     def _sync_tabs(self) -> None:
         selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
@@ -433,7 +434,7 @@ class SerialMonitorApp:
             self.config.selected_ports = self._selected_ports()
             save_config(self.config)
             self._append_port_log(port, "[설정 저장 완료]\n")
-            self.restart_monitoring()
+            self._set_idle_status()
         except Exception as exc:
             self._show_toast("설정 저장 실패: {}".format(exc))
 
@@ -441,24 +442,50 @@ class SerialMonitorApp:
         self.available_ports = list_physical_ports()
         for port in self.available_ports:
             self.config.port_settings.setdefault(port, PortSettings())
-        if not self.config.selected_ports and self.available_ports:
-            self.config.selected_ports = list(self.available_ports)
         self._render_port_checks()
         self.port_option.configure(values=self.available_ports or ["포트 없음"])
         self.current_settings_port.set(self.available_ports[0] if self.available_ports else "포트 없음")
         self._load_settings_form()
         self._sync_tabs()
         save_config(self.config)
+        self._set_idle_status()
+
+    def toggle_test_monitoring(self) -> None:
+        if self.monitor_threads:
+            self._stop_monitoring()
+            self.config.direct_monitor_enabled = False
+            save_config(self.config)
+            self._set_idle_status()
+            return
+
+        selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
+        if not selected:
+            self.status_label.configure(text="● 테스트 포트 없음", text_color="#FFE2A8")
+            self._show_toast("테스트할 포트를 먼저 선택해 주세요.")
+            return
+
+        ok = messagebox.askyesno(
+            "테스트 감시 주의",
+            "직접 COM 감시는 선택한 포트를 독점으로 열 수 있습니다.\n\n"
+            "POS 또는 영수증 프린터가 해당 포트를 사용 중이면 출력이 막힐 수 있습니다.\n"
+            "운영 중인 매장에서는 사용하지 말고, 테스트 환경에서만 실행해 주세요.\n\n"
+            "그래도 테스트 감시를 시작할까요?",
+            parent=self.root,
+        )
+        if not ok:
+            self._set_idle_status()
+            return
         self.restart_monitoring()
 
     def restart_monitoring(self) -> None:
         self._stop_monitoring()
         selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
         self.config.selected_ports = selected
+        self.config.direct_monitor_enabled = False
         save_config(self.config)
         self._sync_tabs()
         if not selected:
-            self.status_label.configure(text="● 감시 포트 없음", text_color="#FFE2A8")
+            self._set_idle_status()
             return
         for port in selected:
             event = threading.Event()
@@ -467,13 +494,31 @@ class SerialMonitorApp:
             self.monitor_threads[port] = thread
             thread.start()
         self.status_label.configure(
-            text="● 감시 중: {}개 포트".format(len(selected)),
+            text="● 테스트 감시 중: {}개 포트".format(len(selected)),
             text_color="#91F0C4",
         )
+        self.monitor_toggle_btn.configure(text="테스트 감시 중지", text_color=COLOR_ERR, border_color="#F3B9B5")
+
+    def _set_idle_status(self) -> None:
+        selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
+        text = "● 대기 중 (COM 포트 점유 안 함)"
+        if selected:
+            text = "● 대기 중: {}개 포트 선택됨".format(len(selected))
+        self.status_label.configure(text=text, text_color="#FFE2A8")
+        if hasattr(self, "monitor_toggle_btn"):
+            self.monitor_toggle_btn.configure(
+                text="테스트 감시 시작",
+                text_color=COLOR_WARN,
+                border_color="#F3C77F",
+            )
 
     def _stop_monitoring(self) -> None:
+        threads = list(self.monitor_threads.values())
         for event in self.stop_events.values():
             event.set()
+        for thread in threads:
+            if thread.is_alive():
+                thread.join(timeout=1.0)
         self.stop_events.clear()
         self.monitor_threads.clear()
 
