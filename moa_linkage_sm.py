@@ -1,9 +1,7 @@
 import ctypes
 import os
 import sys
-import threading
 import tkinter as tk
-from tkinter import messagebox
 from tkinter import scrolledtext
 from typing import Dict, List
 
@@ -13,18 +11,13 @@ from PIL import Image, ImageTk
 from build_info import APP_VERSION, RELEASE_DATE
 from serial_monitor_core import (
     COM_ROOT,
-    CONFIG_PATH,
-    MonitorConfig,
     PortSettings,
     ReceiptLogWriter,
-    ReceiptSplitter,
     ensure_com_dirs,
     list_physical_ports,
     load_config,
     parse_hex_patterns,
-    preview_text,
     save_config,
-    serial_kwargs,
 )
 
 
@@ -115,8 +108,6 @@ class SerialMonitorApp:
 
         self.port_vars: Dict[str, ctk.BooleanVar] = {}
         self.port_tabs: Dict[str, scrolledtext.ScrolledText] = {}
-        self.stop_events: Dict[str, threading.Event] = {}
-        self.monitor_threads: Dict[str, threading.Thread] = {}
         self.settings_vars: Dict[str, tk.StringVar] = {}
         self.current_settings_port = tk.StringVar(value="")
         self.writer = ReceiptLogWriter()
@@ -162,7 +153,7 @@ class SerialMonitorApp:
         ).pack(anchor="w")
         ctk.CTkLabel(
             title_box,
-            text="드라이버 후킹 전까지 직접 감시는 테스트용입니다. 실행만으로 COM 포트를 열지 않습니다.",
+            text="상점 출력은 그대로 두고, 드라이버 후킹 방식으로 지나가는 데이터만 복사하도록 준비합니다.",
             font=ctk.CTkFont(family=FONT_FAMILY, size=12),
             text_color="#EEE4FF",
         ).pack(anchor="w", pady=(4, 0))
@@ -288,8 +279,8 @@ class SerialMonitorApp:
         ).pack(side="left", padx=6)
         self.monitor_toggle_btn = ctk.CTkButton(
             actions,
-            text="테스트 감시 시작",
-            command=self.toggle_test_monitoring,
+            text="드라이버 후킹 준비 중",
+            command=self.show_driver_pending,
             fg_color="#FFFFFF",
             hover_color="#FFF4E5",
             text_color=COLOR_WARN,
@@ -450,111 +441,27 @@ class SerialMonitorApp:
         save_config(self.config)
         self._set_idle_status()
 
-    def toggle_test_monitoring(self) -> None:
-        if self.monitor_threads:
-            self._stop_monitoring()
-            self.config.direct_monitor_enabled = False
-            save_config(self.config)
-            self._set_idle_status()
-            return
-
-        selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
-        if not selected:
-            self.status_label.configure(text="● 테스트 포트 없음", text_color="#FFE2A8")
-            self._show_toast("테스트할 포트를 먼저 선택해 주세요.")
-            return
-
-        ok = messagebox.askyesno(
-            "테스트 감시 주의",
-            "직접 COM 감시는 선택한 포트를 독점으로 열 수 있습니다.\n\n"
-            "POS 또는 영수증 프린터가 해당 포트를 사용 중이면 출력이 막힐 수 있습니다.\n"
-            "운영 중인 매장에서는 사용하지 말고, 테스트 환경에서만 실행해 주세요.\n\n"
-            "그래도 테스트 감시를 시작할까요?",
-            parent=self.root,
-        )
-        if not ok:
-            self._set_idle_status()
-            return
-        self.restart_monitoring()
-
-    def restart_monitoring(self) -> None:
-        self._stop_monitoring()
-        selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
-        self.config.selected_ports = selected
-        self.config.direct_monitor_enabled = False
-        save_config(self.config)
-        self._sync_tabs()
-        if not selected:
-            self._set_idle_status()
-            return
-        for port in selected:
-            event = threading.Event()
-            self.stop_events[port] = event
-            thread = threading.Thread(target=self._monitor_port, args=(port, event), daemon=True)
-            self.monitor_threads[port] = thread
-            thread.start()
-        self.status_label.configure(
-            text="● 테스트 감시 중: {}개 포트".format(len(selected)),
-            text_color="#91F0C4",
-        )
-        self.monitor_toggle_btn.configure(text="테스트 감시 중지", text_color=COLOR_ERR, border_color="#F3B9B5")
+    def show_driver_pending(self) -> None:
+        self._show_toast("운영 매장 안전을 위해 직접 COM 감시는 비활성화되어 있습니다.")
+        for port in self._selected_ports():
+            self._append_port_log(
+                port,
+                "[대기] 직접 COM 감시는 포트를 점유하므로 비활성화되었습니다.\n"
+                "[대기] 무료/오픈소스 드라이버 후킹 PoC가 완료되면 이 포트 설정을 사용합니다.\n",
+            )
 
     def _set_idle_status(self) -> None:
         selected = self._selected_ports() if self.port_vars else list(self.config.selected_ports)
-        text = "● 대기 중 (COM 포트 점유 안 함)"
+        text = "● 안전 대기 중 (COM 포트 점유 안 함)"
         if selected:
-            text = "● 대기 중: {}개 포트 선택됨".format(len(selected))
+            text = "● 안전 대기 중: {}개 포트 설정됨".format(len(selected))
         self.status_label.configure(text=text, text_color="#FFE2A8")
         if hasattr(self, "monitor_toggle_btn"):
             self.monitor_toggle_btn.configure(
-                text="테스트 감시 시작",
+                text="드라이버 후킹 준비 중",
                 text_color=COLOR_WARN,
                 border_color="#F3C77F",
             )
-
-    def _stop_monitoring(self) -> None:
-        threads = list(self.monitor_threads.values())
-        for event in self.stop_events.values():
-            event.set()
-        for thread in threads:
-            if thread.is_alive():
-                thread.join(timeout=1.0)
-        self.stop_events.clear()
-        self.monitor_threads.clear()
-
-    def _monitor_port(self, port: str, stop_event: threading.Event) -> None:
-        settings = self.config.port_settings.get(port, PortSettings())
-        splitter = ReceiptSplitter(
-            cut_patterns=parse_hex_patterns(settings.cut_patterns_hex),
-            idle_timeout_ms=settings.idle_timeout_ms,
-            min_bytes=settings.min_bytes,
-        )
-        try:
-            import serial
-            ser = serial.Serial(port=port, **serial_kwargs(settings))
-        except Exception as exc:
-            self._append_port_log(port, "[감시 실패] {}\n".format(exc), error=True)
-            return
-
-        self._append_port_log(port, "[감시 시작] {}\n".format(port))
-        try:
-            while not stop_event.is_set():
-                data = ser.read(4096)
-                if data:
-                    self._append_port_log(port, preview_text(data, settings.encoding))
-                    for receipt in splitter.feed(data):
-                        self._write_receipt(port, receipt)
-                else:
-                    for receipt in splitter.flush_idle():
-                        self._write_receipt(port, receipt)
-        finally:
-            for receipt in splitter.flush_all():
-                self._write_receipt(port, receipt)
-            try:
-                ser.close()
-            except Exception:
-                pass
-            self._append_port_log(port, "\n[감시 종료]\n")
 
     def _write_receipt(self, port: str, data: bytes) -> None:
         try:
@@ -625,7 +532,6 @@ class SerialMonitorApp:
         self.root.focus_force()
 
     def _exit_app(self) -> None:
-        self._stop_monitoring()
         if self.tray_icon:
             try:
                 self.tray_icon.stop()

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import tempfile
 import unittest
 from datetime import datetime
@@ -82,6 +83,14 @@ class MonitorConfigTests(unittest.TestCase):
         self.assertFalse(config.direct_monitor_enabled)
         self.assertIn("COM1", config.port_settings)
         self.assertIn("COM2", config.port_settings)
+
+
+class AgentSafetyTests(unittest.TestCase):
+    def test_agent_does_not_directly_open_serial_ports(self):
+        source = Path("moa_linkage_sm.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("serial.Serial", source)
+        self.assertNotIn("restart_monitoring", source)
 
 
 if __name__ == "__main__":
