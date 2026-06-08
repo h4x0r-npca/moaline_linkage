@@ -53,6 +53,7 @@ from PIL import Image, ImageTk
 import admin
 import com0com_handler as c0c
 import config_writer
+import monitoring_manager
 import moaline_detector
 import process_handler
 from build_info import APP_VERSION, RELEASE_DATE
@@ -87,6 +88,24 @@ REMOVE_STEPS = [
     "가상 COM 포트 제거",
     "모아라인 재시작",
     "",
+    "",
+]
+
+MONITOR_INSTALL_STEPS = [
+    "C:\\COM 폴더 준비",
+    "모니터링 프로그램 설치",
+    "자동실행 등록",
+    "모니터링 프로그램 실행",
+    "상태 확인",
+    "완료",
+]
+
+MONITOR_REMOVE_STEPS = [
+    "모니터링 프로그램 종료",
+    "자동실행 등록 제거",
+    "실행 파일 제거",
+    "상태 확인",
+    "완료",
     "",
 ]
 
@@ -237,6 +256,68 @@ def show_error_and_exit(parent: tk.Tk) -> None:
     _center_on(dlg, parent)
 
 
+class HelpDialog(ctk.CTkToplevel):
+    def __init__(self, parent: tk.Tk) -> None:
+        super().__init__(parent)
+        self.title("도움말/사용방법")
+        self.geometry("620x520")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=COLOR_PANEL)
+
+        ctk.CTkLabel(
+            self,
+            text="도움말/사용방법",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=20, weight="bold"),
+            text_color=COLOR_ERR,
+        ).pack(anchor="w", padx=28, pady=(24, 8))
+
+        help_text = (
+            "이 프로그램에는 두 가지 연동이 있습니다.\n\n"
+            "1. 모니터링연동\n"
+            "   - 영수증 출력 데이터를 로그 파일로 남기고 싶을 때 사용합니다.\n"
+            "   - [연동시작]을 누르면 C:\\COM 폴더에 모니터링 프로그램이 설치되고 자동 실행됩니다.\n"
+            "   - 컴퓨터를 껐다 켜도 자동으로 다시 실행됩니다.\n"
+            "   - [연동삭제]를 누르면 자동 실행 등록과 모니터링 프로그램만 제거됩니다.\n"
+            "   - 기존 로그 파일은 지우지 않습니다.\n\n"
+            "2. 가상프린터연동\n"
+            "   - 기존 방식처럼 가상 COM 포트를 만들고 모아라인 설정 파일을 자동 수정합니다.\n"
+            "   - POS 프로그램에서 프린터 포트를 새로 만들어진 COM 포트로 잡아야 합니다.\n"
+            "   - 포스에서 낮은 포트만 허용하면 [낮은연동포트번호 사용]을 체크한 뒤 시작합니다.\n"
+            "   - [연동삭제]를 누르면 설정 파일을 복원하고 가상 COM 포트를 제거합니다.\n\n"
+            "STATUS가 빨간색이면 아직 설치 또는 실행이 안 된 상태입니다.\n"
+            "STATUS가 초록색이면 해당 연동이 실행 중이거나 설정이 완료된 상태입니다.\n\n"
+            "문제가 생기면 같은 버튼을 여러 번 누르지 말고, 진행 로그의 오류 문구를 확인한 뒤 고객센터로 문의해 주세요."
+        )
+
+        text_box = tk.Text(
+            self,
+            wrap="word",
+            font=(FONT_FAMILY, 11),
+            bg="#FBFAFD",
+            fg=COLOR_TEXT,
+            relief="flat",
+            padx=16,
+            pady=14,
+        )
+        text_box.pack(fill="both", expand=True, padx=28, pady=(0, 18))
+        text_box.insert("1.0", help_text)
+        text_box.config(state="disabled")
+
+        ctk.CTkButton(
+            self,
+            text="닫기",
+            width=120,
+            height=38,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLOR_PRIMARY,
+            hover_color=COLOR_PRIMARY_DARK,
+            command=self.destroy,
+        ).pack(pady=(0, 22))
+
+        _center_on(self, parent)
+
+
 # ──────────────────────────────────────────────
 # 메인 앱
 # ──────────────────────────────────────────────
@@ -250,7 +331,7 @@ class App:
                 RELEASE_DATE,
             )
         )
-        root.geometry("820x620")
+        root.geometry("900x720")
         root.resizable(False, False)
         root.configure(fg_color=COLOR_BG)
         root.grid_rowconfigure(0, weight=0)
@@ -305,10 +386,22 @@ class App:
         ).pack(anchor="w", pady=(12, 2))
 
         ctk.CTkLabel(
-            title_box, text="가상 COM 포트 설정부터 모아라인 재시작까지 한 번에 처리합니다.",
+            title_box, text="모니터링연동과 가상프린터연동을 한 화면에서 관리합니다.",
             font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             text_color="#EEE4FF",
         ).pack(anchor="w")
+
+        ctk.CTkButton(
+            header,
+            text="도움말/사용방법",
+            width=150,
+            height=38,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLOR_ERR,
+            hover_color="#B42318",
+            text_color="#FFFFFF",
+            command=self._show_help,
+        ).pack(side="right", padx=(10, 24), pady=34)
 
         content = ctk.CTkFrame(self.root, fg_color="transparent")
         content.grid(row=1, column=0, sticky="nsew", padx=20, pady=18)
@@ -380,21 +473,90 @@ class App:
         self._log_text.tag_config("OK",    foreground="#91F0C4")
         self._log_text.tag_config("INFO",  foreground="#EEEAF5")
 
-        # 하단: 버튼
+        # 하단: 연동 제어 영역
         btn_frame = ctk.CTkFrame(
             self.root,
             fg_color=COLOR_PANEL,
             corner_radius=0,
-            height=76,
+            height=164,
         )
         btn_frame.grid(row=2, column=0, sticky="ew")
         btn_frame.pack_propagate(False)
 
         btn_inner = ctk.CTkFrame(btn_frame, fg_color="transparent")
-        btn_inner.pack(fill="both", expand=True, padx=20, pady=16)
+        btn_inner.pack(fill="both", expand=True, padx=20, pady=12)
+
+        monitor_row = ctk.CTkFrame(btn_inner, fg_color="transparent")
+        monitor_row.pack(fill="x", pady=(0, 8))
+        printer_row = ctk.CTkFrame(btn_inner, fg_color="transparent")
+        printer_row.pack(fill="x")
+
+        ctk.CTkLabel(
+            monitor_row,
+            text="모니터링연동",
+            width=126,
+            anchor="w",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            text_color=COLOR_PRIMARY,
+        ).pack(side="left", padx=(2, 8))
+
+        monitor_status_box = ctk.CTkFrame(
+            monitor_row,
+            fg_color=COLOR_PRIMARY_SOFT,
+            corner_radius=12,
+            border_width=1,
+            border_color=COLOR_PRIMARY_LINE,
+        )
+        monitor_status_box.pack(side="left", fill="y")
+
+        self._monitor_status_dot = ctk.CTkLabel(
+            monitor_status_box,
+            text="●",
+            width=18,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            text_color=COLOR_WARN,
+        )
+        self._monitor_status_dot.pack(side="left", padx=(16, 6), pady=8)
+
+        self._monitor_status_label = ctk.CTkLabel(
+            monitor_status_box,
+            text="STATUS : 연동 확인 중",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            text_color=COLOR_TEXT,
+        )
+        self._monitor_status_label.pack(side="left", padx=(0, 16), pady=8)
+
+        self._monitor_remove_btn = ctk.CTkButton(
+            monitor_row, text="연동 삭제",
+            width=128, height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
+            fg_color="#FFFFFF", hover_color="#FDECEC",
+            text_color=COLOR_ERR, border_width=1, border_color="#F3B9B5",
+            command=self._on_monitor_remove,
+        )
+        self._monitor_remove_btn.pack(side="right", padx=(6, 0))
+
+        self._monitor_start_btn = ctk.CTkButton(
+            monitor_row, text="연동 시작",
+            width=144, height=40,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
+            fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_DARK,
+            text_color="#FFFFFF",
+            command=self._on_monitor_start,
+        )
+        self._monitor_start_btn.pack(side="right")
+
+        ctk.CTkLabel(
+            printer_row,
+            text="가상프린터연동",
+            width=126,
+            anchor="w",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold"),
+            text_color=COLOR_PRIMARY,
+        ).pack(side="left", padx=(2, 8))
 
         status_box = ctk.CTkFrame(
-            btn_inner,
+            printer_row,
             fg_color=COLOR_PRIMARY_SOFT,
             corner_radius=12,
             border_width=1,
@@ -420,7 +582,7 @@ class App:
         self._status_label.pack(side="left", padx=(0, 16), pady=8)
 
         self._low_port_check = ctk.CTkCheckBox(
-            btn_inner,
+            printer_row,
             text="낮은연동포트번호 사용",
             variable=self._low_port_var,
             width=160,
@@ -435,8 +597,8 @@ class App:
         self._low_port_check.pack(side="left", padx=(12, 0), pady=10)
 
         self._remove_btn = ctk.CTkButton(
-            btn_inner, text="연동 삭제",
-            width=128, height=42,
+            printer_row, text="연동 삭제",
+            width=128, height=40,
             font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             fg_color="#FFFFFF", hover_color="#FDECEC",
             text_color=COLOR_ERR, border_width=1, border_color="#F3B9B5",
@@ -445,14 +607,17 @@ class App:
         self._remove_btn.pack(side="right", padx=(6, 0))
 
         self._start_btn = ctk.CTkButton(
-            btn_inner, text="연동 시작",
-            width=144, height=42,
+            printer_row, text="연동 시작",
+            width=144, height=40,
             font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold"),
             fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_DARK,
             text_color="#FFFFFF",
             command=self._on_start,
         )
         self._start_btn.pack(side="right")
+
+    def _show_help(self) -> None:
+        HelpDialog(self.root)
 
     # ── 단계 목록 리셋 ────────────────────────
     def _reset_steps(self, steps: List[str]) -> None:
@@ -485,11 +650,15 @@ class App:
         state = "normal" if enabled else "disabled"
         self.root.after(0, lambda: self._start_btn.configure(state=state))
         self.root.after(0, lambda: self._remove_btn.configure(state=state))
+        self.root.after(0, lambda: self._monitor_start_btn.configure(state=state))
+        self.root.after(0, lambda: self._monitor_remove_btn.configure(state=state))
         self.root.after(0, lambda: self._low_port_check.configure(state=state))
 
     def _finish_action(self) -> None:
         self._start_btn.configure(state="normal")
         self._remove_btn.configure(state="normal")
+        self._monitor_start_btn.configure(state="normal")
+        self._monitor_remove_btn.configure(state="normal")
         self._low_port_check.configure(state="normal")
         self.root.after(300, self._refresh_status)
 
@@ -503,6 +672,15 @@ class App:
         self._status_dot.configure(text_color=color_map.get(state, COLOR_WAIT))
         self._status_label.configure(text=text)
 
+    def _set_monitor_status(self, state: str, text: str) -> None:
+        color_map = {
+            "checking": COLOR_WARN,
+            "linked": COLOR_OK,
+            "missing": COLOR_ERR,
+        }
+        self._monitor_status_dot.configure(text_color=color_map.get(state, COLOR_WAIT))
+        self._monitor_status_label.configure(text=text)
+
     def _refresh_status(self) -> None:
         self._status_refresh_id += 1
         refresh_id = self._status_refresh_id
@@ -511,6 +689,7 @@ class App:
             "refresh_id={}".format(refresh_id),
         )
         self._set_status("checking", "STATUS : 연동 확인 중")
+        self._set_monitor_status("checking", "STATUS : 연동 확인 중")
         threading.Thread(
             target=self._refresh_status_worker,
             args=(refresh_id,),
@@ -524,26 +703,43 @@ class App:
             "refresh_id={}".format(refresh_id),
         )
         is_linked, status_text = self._check_linkage_status()
+        monitor_linked, monitor_status_text = self._check_monitoring_status()
         elapsed = time.perf_counter() - started_at
         startup_logger.log_startup_event(
             "status_check_finish",
-            "refresh_id={} | linked={} | elapsed={:0.3f}s | text={}".format(
+            "refresh_id={} | printer_linked={} | monitor_linked={} | elapsed={:0.3f}s | text={}".format(
                 refresh_id,
                 is_linked,
+                monitor_linked,
                 elapsed,
                 status_text,
             ),
         )
         state = "linked" if is_linked else "missing"
+        monitor_state = "linked" if monitor_linked else "missing"
         self.root.after(
             0,
-            lambda: self._apply_status_result(refresh_id, state, status_text),
+            lambda: self._apply_status_result(
+                refresh_id,
+                state,
+                status_text,
+                monitor_state,
+                monitor_status_text,
+            ),
         )
 
-    def _apply_status_result(self, refresh_id: int, state: str, status_text: str) -> None:
+    def _apply_status_result(
+        self,
+        refresh_id: int,
+        state: str,
+        status_text: str,
+        monitor_state: str,
+        monitor_status_text: str,
+    ) -> None:
         if refresh_id != self._status_refresh_id:
             return
         self._set_status(state, status_text)
+        self._set_monitor_status(monitor_state, monitor_status_text)
 
     def _check_linkage_status(self) -> Tuple[bool, str]:
         try:
@@ -585,6 +781,12 @@ class App:
         except Exception:
             return False, "STATUS : 연동 미설치"
 
+    def _check_monitoring_status(self) -> Tuple[bool, str]:
+        try:
+            return monitoring_manager.monitoring_status_text()
+        except Exception:
+            return False, "STATUS : 연동 미설치"
+
     # ── 로그 (스레드 안전) ────────────────────
     def _append_log(self, message: str, level: str = "INFO") -> None:
         def _do():
@@ -599,7 +801,117 @@ class App:
     def log_err(self, msg: str)-> None: self._append_log(msg, "ERROR")
 
     # ════════════════════════════════════════
-    # 연동 시작 흐름
+    # 모니터링연동 시작/삭제 흐름
+    # ════════════════════════════════════════
+    def _on_monitor_start(self) -> None:
+        self._set_buttons(False)
+        self.root.after(0, lambda: self._reset_steps(MONITOR_INSTALL_STEPS))
+        threading.Thread(target=self._run_monitor_install_steps, daemon=True).start()
+
+    def _run_monitor_install_steps(self) -> None:
+        try:
+            self._monitor_step_dirs()
+            exe_path = self._monitor_step_copy_agent()
+            self._monitor_step_register(exe_path)
+            self._monitor_step_start()
+            self._monitor_step_status(expected=True, idx=4)
+            self._step_update(5, STATUS_OK)
+            self.log_ok("모니터링연동 설치 및 실행 완료")
+        except Exception as e:
+            self.log_err("오류: {}".format(e))
+            self.root.after(0, lambda: show_error_and_exit(self.root))
+        finally:
+            self.root.after(0, self._finish_action)
+
+    def _on_monitor_remove(self) -> None:
+        self._set_buttons(False)
+        self.root.after(0, lambda: self._reset_steps(MONITOR_REMOVE_STEPS))
+        threading.Thread(target=self._run_monitor_remove_steps, daemon=True).start()
+
+    def _run_monitor_remove_steps(self) -> None:
+        try:
+            self._monitor_step_stop()
+            self._monitor_step_unregister()
+            self._monitor_step_remove_file()
+            self._monitor_step_status(expected=False, idx=3)
+            self._step_update(4, STATUS_OK)
+            self.log_ok("모니터링연동 삭제 완료 (로그 파일은 유지됨)")
+        except Exception as e:
+            self.log_err("오류: {}".format(e))
+            self.root.after(0, lambda: show_error_and_exit(self.root))
+        finally:
+            self.root.after(0, self._finish_action)
+
+    def _monitor_step_dirs(self) -> None:
+        self._step_update(0, STATUS_RUN)
+        self.log("▶ C:\\COM 폴더 준비 중...")
+        monitoring_manager.ensure_monitoring_dirs()
+        self.log_ok("  C:\\COM, NEWBMLOG, NEWLOG 준비 완료")
+        self._step_update(0, STATUS_OK)
+
+    def _monitor_step_copy_agent(self) -> str:
+        self._step_update(1, STATUS_RUN)
+        self.log("▶ 모니터링 프로그램 설치 중...")
+        source = monitoring_manager.find_agent_source(resource_path)
+        if not source:
+            raise RuntimeError("moa_linkageSM.exe 파일을 찾을 수 없습니다. 먼저 빌드를 진행해 주세요.")
+        target = monitoring_manager.copy_agent(source)
+        self.log_ok("  설치 완료: {}".format(target))
+        self._step_update(1, STATUS_OK)
+        return target
+
+    def _monitor_step_register(self, exe_path: str) -> None:
+        self._step_update(2, STATUS_RUN)
+        self.log("▶ 자동실행 등록 중...")
+        hive = monitoring_manager.register_run(exe_path)
+        self.log_ok("  자동실행 등록 완료 ({})".format(hive))
+        self._step_update(2, STATUS_OK)
+
+    def _monitor_step_start(self) -> None:
+        self._step_update(3, STATUS_RUN)
+        self.log("▶ 모니터링 프로그램 실행 중...")
+        if not monitoring_manager.is_agent_running():
+            if not monitoring_manager.start_agent():
+                raise RuntimeError("모니터링 프로그램 실행에 실패했습니다.")
+        self.log_ok("  실행 완료")
+        self._step_update(3, STATUS_OK)
+
+    def _monitor_step_stop(self) -> None:
+        self._step_update(0, STATUS_RUN)
+        self.log("▶ 모니터링 프로그램 종료 중...")
+        if monitoring_manager.stop_agent():
+            self.log_ok("  종료 완료")
+        else:
+            self.log("  실행 중인 모니터링 프로그램이 없습니다.")
+        self._step_update(0, STATUS_OK)
+
+    def _monitor_step_unregister(self) -> None:
+        self._step_update(1, STATUS_RUN)
+        self.log("▶ 자동실행 등록 제거 중...")
+        monitoring_manager.unregister_run()
+        self.log_ok("  자동실행 등록 제거 완료")
+        self._step_update(1, STATUS_OK)
+
+    def _monitor_step_remove_file(self) -> None:
+        self._step_update(2, STATUS_RUN)
+        self.log("▶ 실행 파일 제거 중...")
+        if monitoring_manager.remove_agent_file():
+            self.log_ok("  실행 파일 제거 완료")
+        else:
+            self.log("  제거할 실행 파일이 없습니다.")
+        self._step_update(2, STATUS_OK)
+
+    def _monitor_step_status(self, expected: bool, idx: int) -> None:
+        self._step_update(idx, STATUS_RUN)
+        linked, text = self._check_monitoring_status()
+        if linked != expected:
+            self._step_update(idx, STATUS_ERR)
+            raise RuntimeError("모니터링연동 상태 확인 실패: {}".format(text))
+        self.log_ok("  {}".format(text))
+        self._step_update(idx, STATUS_OK)
+
+    # ════════════════════════════════════════
+    # 가상프린터연동 시작 흐름
     # ════════════════════════════════════════
     def _on_start(self) -> None:
         self._use_low_ports = bool(self._low_port_var.get())
@@ -687,7 +999,7 @@ class App:
         self._step_update(4, STATUS_OK)
 
     # ════════════════════════════════════════
-    # 연동 제거 흐름
+    # 가상프린터연동 제거 흐름
     # ════════════════════════════════════════
     def _on_remove(self) -> None:
         self._set_buttons(False)

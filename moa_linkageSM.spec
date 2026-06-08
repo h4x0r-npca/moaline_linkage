@@ -1,16 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
 
-datas = [('로고.webp', '.'), ('로고한글.webp', '.'), ('로고.svg', '.'), ('moaline.ico', '.')]
+datas = [('로고.webp', '.'), ('로고한글.webp', '.'), ('moaline.ico', '.')]
 datas += collect_data_files('customtkinter')
 
 
 block_cipher = None
 
 
-a = Analysis(['main.py'],
+a = Analysis(['moa_linkage_sm.py'],
              pathex=['C:\\Users\\inbiz_ks\\OneDrive - 바로고\\Program\\moa-linkage'],
-             binaries=[('dist\\moa_linkageSM.exe', '.')],
+             binaries=[],
              datas=datas,
              hiddenimports=[],
              hookspath=[],
@@ -30,7 +30,7 @@ exe = EXE(pyz,
           a.zipfiles,
           a.datas,  
           [],
-          name='모아라인연동자동화',
+          name='moa_linkageSM',
           debug=False,
           bootloader_ignore_signals=False,
           strip=False,
@@ -41,4 +41,4 @@ exe = EXE(pyz,
           disable_windowed_traceback=False,
           target_arch=None,
           codesign_identity=None,
-          entitlements_file=None , version='version_info.txt', uac_admin=True, icon='moaline.ico')
+          entitlements_file=None , icon='moaline.ico')

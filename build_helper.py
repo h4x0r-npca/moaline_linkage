@@ -15,6 +15,10 @@ install_package("Pillow==10.4.0", "--only-binary", ":all:", "--quiet")
 
 install_package("customtkinter==5.2.2", "--quiet")
 
+install_package("pyserial==3.5", "--quiet")
+
+install_package("pystray==0.19.5", "--quiet")
+
 install_package("pyinstaller==4.5.1", "--quiet")
 
 Path("build_info.py").write_text(
@@ -23,6 +27,21 @@ Path("build_info.py").write_text(
 )
 
 import PyInstaller.__main__
+PyInstaller.__main__.run([
+    "moa_linkage_sm.py",
+    "--noconfirm",
+    "--clean",
+    "--onefile",
+    "--noconsole",
+    "--noupx",
+    "--icon", "moaline.ico",
+    "--collect-data", "customtkinter",
+    "--add-data", "로고.webp;.",
+    "--add-data", "로고한글.webp;.",
+    "--add-data", "moaline.ico;.",
+    "--name", "moa_linkageSM",
+])
+
 PyInstaller.__main__.run([
     "main.py",
     "--noconfirm",
@@ -38,6 +57,7 @@ PyInstaller.__main__.run([
     "--add-data", "로고한글.webp;.",
     "--add-data", "로고.svg;.",
     "--add-data", "moaline.ico;.",
+    "--add-binary", "dist\\moa_linkageSM.exe;.",
     "--name", "모아라인연동자동화",
 ])
 
