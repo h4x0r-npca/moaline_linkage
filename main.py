@@ -237,6 +237,59 @@ def show_error_and_exit(parent: tk.Tk) -> None:
     _center_on(dlg, parent)
 
 
+def show_usage_help(parent: tk.Tk) -> None:
+    dlg = ctk.CTkToplevel(parent)
+    dlg.title("도움말/사용방법")
+    dlg.geometry("560x430")
+    dlg.resizable(False, False)
+    dlg.grab_set()
+    dlg.configure(fg_color=COLOR_PANEL)
+
+    ctk.CTkLabel(
+        dlg,
+        text="도움말/사용방법",
+        font=ctk.CTkFont(family=FONT_FAMILY, size=20, weight="bold"),
+        text_color=COLOR_ERR,
+    ).pack(fill="x", padx=28, pady=(24, 8), anchor="w")
+
+    help_text = (
+        "1. 처음 설치할 때는 [연동 시작] 버튼을 누르세요.\n"
+        "   버튼을 누르면 필요한 포트가 자동으로 만들어집니다.\n\n"
+        "2. 연동이 끝나면 화면에 COM 번호가 나옵니다.\n"
+        "   예: COM16\n\n"
+        "3. 포스 프로그램 또는 주문 프로그램에서 프린터를 추가하세요.\n"
+        "   프린터 연결 포트는 화면에 나온 COM 번호로 선택하세요.\n\n"
+        "4. 이후 영수증을 출력하면 모아라인으로 자동 연동됩니다.\n\n"
+        "5. 포스 프로그램에서 낮은 포트만 선택할 수 있으면\n"
+        "   [낮은연동포트번호 사용]을 체크하고 [연동 시작]을 누르세요.\n\n"
+        "6. 연동을 지우고 싶으면 [연동 삭제] 버튼을 누르세요.\n"
+        "   기존 설정이 복원되고 만든 포트가 삭제됩니다.\n\n"
+        "문의 : 구교선 (inbiz_ks@barogo.com)"
+    )
+
+    ctk.CTkLabel(
+        dlg,
+        text=help_text,
+        justify="left",
+        wraplength=500,
+        font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+        text_color=COLOR_TEXT,
+    ).pack(fill="both", padx=28, pady=(4, 18), anchor="w")
+
+    ctk.CTkButton(
+        dlg,
+        text="닫기",
+        width=120,
+        height=36,
+        font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+        fg_color=COLOR_PRIMARY,
+        hover_color=COLOR_PRIMARY_DARK,
+        command=dlg.destroy,
+    ).pack(pady=(0, 22))
+
+    _center_on(dlg, parent)
+
+
 # ──────────────────────────────────────────────
 # 메인 앱
 # ──────────────────────────────────────────────
@@ -294,6 +347,18 @@ class App:
         ctk.CTkLabel(header, text="", image=self._logo_image).pack(
             side="left", padx=(26, 18), pady=18
         )
+
+        ctk.CTkButton(
+            header,
+            text="도움말/사용방법",
+            width=148,
+            height=38,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            fg_color=COLOR_ERR,
+            hover_color="#B42318",
+            text_color="#FFFFFF",
+            command=lambda: show_usage_help(self.root),
+        ).pack(side="right", padx=(10, 24), pady=42)
 
         title_box = ctk.CTkFrame(header, fg_color="transparent")
         title_box.pack(side="left", fill="both", expand=True, pady=18)
