@@ -373,6 +373,8 @@ class App:
             title_box, text="가상 COM 포트 설정부터 모아라인 재시작까지 한 번에 처리합니다.",
             font=ctk.CTkFont(family=FONT_FAMILY, size=13),
             text_color="#EEE4FF",
+            wraplength=340,
+            justify="left",
         ).pack(anchor="w")
 
         content = ctk.CTkFrame(self.root, fg_color="transparent")
